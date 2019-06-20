@@ -1,5 +1,5 @@
 {
-    "name": "azonmedia/dependencies",
+    "name": "azonmedia/di",
     "type": "library",
     "description": "Dependency injection container",
     "keywords": ["dependency injection", "di", "container"],
