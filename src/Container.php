@@ -6,56 +6,84 @@ use Azonmedia\Di\Exceptions\ContainerException;
 use Azonmedia\Di\Exceptions\NotFoundException;
 use Psr\Container\ContainerInterface;
 
+/**
+ * Class Container
+ * Implements autowiring.
+ * Does not implement compiling (if executed in swoole this is not needed)
+ * @package Azonmedia\Di
+ */
 class Container
     implements ContainerInterface
 {
 
-
-    private $config = [
-//        'ConnectionFactory'         => [
-//            'class'             => ConnectionFactory::class,
-//            'args'              => [],
-//            ]
-
-
-//        'dependencies'          => [
-//            ConnectionFactory::class        => [
-//                'ConnectionProvider'           => Pool::class,
-//            ],
-//            Pool::class                     => [
-//                'options'                       => [
-//                    'max_connections'               => 12,
-//                ]
-//            ]
-//            'ConnectionFactory'             => [
-//                'class'                         => ConnectionFactory::class,
-//                'args'                          => [ //indexed array
-//
-//                ],
-//            ],
-//            'ConnectionProviderInterface'   => [
-//                'class'                         => Pool::class,
-//                'args'                          => [
-//
-//                ]
-//            ]
-//        ]
-    ];
+    /**
+     * @example
+    'ConnectionFactory'             => [
+    'class'                         => ConnectionFactory::class,
+    'args'                          => [
+    'ConnectionProvider'            => 'ConnectionProviderPool',
+    ],
+    ],
+    'ConnectionProviderPool'       => [
+    'class'                         => Pool::class,
+    'args'                          => [],
+    ],
+    'SomeExample'                   => [
+    'class'                         => SomeClass::class,
+    'args'                          => [
+    'arg1'                      => 20,
+    'arg2'                      => 'something'
+    ],
+    ]
+     * @var array
+     */
+    private $config = [];
 
     /**
      * @var array Array of objects/services/dependencies
      */
     private $dependencies = [];
 
+    /**
+     * Contains the name of the class replacing the ContainerException
+     * @var string
+     */
     private $container_exception_class = '';
 
+    /**
+     * Contains the name of the class replacing the NotFoundException
+     * @var string
+     */
     private $not_found_exception_class = '';
 
+    /**
+     * Container constructor.
+     * @param array $config
+     * @param string $container_exception_class
+     * @param string $not_found_exception_class
+     * @throws \InvalidArgumentException
+     */
     public function __construct(array $config, $container_exception_class = ContainerException::class, $not_found_exception_class = NotFoundException::class)
     {
 
         $this->config = $config;
 
+        if ($container_exception_class !== ContainerException::class) {
+            if (!class_exists($container_exception_class)) {
+                throw new \InvalidArgumentException(sprintf('The provided class %s replacing %s does not exist.'), $container_exception_class, ContainerException::class);
+            }
+            if (!is_subclass_of($container_exception_class, ContainerException::class)) {
+                throw new \InvalidArgumentException(sprintf('The provided class %s replacing %s must be extending %s.'), $container_exception_class, ContainerException::class, ContainerException::class);
+            }
+        }
+        if ($not_found_exception_class !== NotFoundException::class) {
+            if (!class_exists($not_found_exception_class)) {
+                throw new \InvalidArgumentException(sprintf('The provided class %s replacing %s does not exist.'), $not_found_exception_class, NotFoundException::class);
+            }
+            if (!is_subclass_of($not_found_exception_class, NotFoundException::class)) {
+                throw new \InvalidArgumentException(sprintf('The provided class %s replacing %s must be extending %s.'), $not_found_exception_class, NotFoundException::class, NotFoundException::class);
+            }
+        }
         $this->container_exception_class = $container_exception_class;
         $this->not_found_exception_class = $not_found_exception_class;
     }
@@ -75,33 +103,33 @@ class Container
         return $this->instantiate_dependency($id);
     }
 
+    /**
+     * @inheritDoc
+     * @param string $id
+     * @return bool
+     */
     //public function has(string $id) : bool
     public function has($id)
     {
         return array_key_exists($id, $this->config);
     }
-//
-//    private function get_id_from_class(string $class_name) : string
-//    {
-//        $ret = NULL;
-//        foreach ($this->config as $id => $data) {
-//            if ($data['class'] === $class_name) {
-//                $ret = $id;
-//                break;
-//            }
-//        }
-//        if ($ret === NULL) {
-//            $exception_class = $this->not_found_exception_class;
-//            throw new $exception_class(sprintf('There is no dependency using the class %s.', $class_name));
-//        }
-//        return $ret;
-//    }
 
+    /**
+     * Instantiates the object for the provided service $id if the object does not exist already.
+     * @param string $id Service name
+     * @return object
+     * @throws \ReflectionException
+     * @throws ContainerException
+     * @throws NotFoundException
+     */
     private function instantiate_dependency(string $id) : object
     {
 
         if (empty($this->dependencies[$id])) {
-
+            if (!$this->has($id)) {
+                $exception_class = $this->not_found_exception_class;
+                throw new $exception_class(sprintf('The requested dependency %s is not defined.', $id));
+            }
             $class_name = $this->config[$id]['class'];
             $RClass = new \ReflectionClass($class_name);
             $RConstruct = $RClass->getMethod('__construct');
