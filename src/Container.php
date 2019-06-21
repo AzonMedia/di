@@ -8,6 +8,8 @@ use Psr\Container\ContainerInterface;
 
 /**
  * Class Container
+ * Implements PSR 11
+ * @link https://www.php-fig.org/psr/psr-11/
  * Implements autowiring.
  * Does not implement compiling (if executed in swoole this is not needed)
  * @package Azonmedia\Di
