@@ -70,6 +70,13 @@ class Container
 
         $this->config = $config;
 
+        //certain dependencies may need to be initialized immediately instead of request
+        foreach ($this->config as $dependency_name=>$dependency_config) {
+            if (!empty($dependency_config['initialize_immediately'])) {
+                $this->instantiate_dependency($dependency_name);
+            }
+        }
+
         if ($container_exception_class !== ContainerException::class) {
             if (!class_exists($container_exception_class)) {
                 throw new \InvalidArgumentException(sprintf('The provided class %s replacing %s does not exist.'), $container_exception_class, ContainerException::class);
