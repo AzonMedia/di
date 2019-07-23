@@ -70,13 +70,6 @@ class Container
 
         $this->config = $config;
 
-        //certain dependencies may need to be initialized immediately instead of request
-        foreach ($this->config as $dependency_name=>$dependency_config) {
-            if (!empty($dependency_config['initialize_immediately'])) {
-                $this->instantiate_dependency($dependency_name);
-            }
-        }
-
         if ($container_exception_class !== ContainerException::class) {
             if (!class_exists($container_exception_class)) {
                 throw new \InvalidArgumentException(sprintf('The provided class %s replacing %s does not exist.'), $container_exception_class, ContainerException::class);
@@ -95,6 +88,17 @@ class Container
         }
         $this->container_exception_class = $container_exception_class;
         $this->not_found_exception_class = $not_found_exception_class;
+
+
+        //certain dependencies may need to be initialized immediately instead of request
+        foreach ($this->config as $dependency_name=>$dependency_config) {
+            if (!empty($dependency_config['initialize_immediately'])) {
+                $this->instantiate_dependency($dependency_name);
+            }
+        }
+
+
+
     }
 
     /**
@@ -144,97 +148,122 @@ class Container
             }
             $class_name = $this->config[$id]['class'];
             $RClass = new \ReflectionClass($class_name);
-            $RConstruct = $RClass->getMethod('__construct');
-            $params = $RConstruct->getParameters();
+
+            //it is possible that the class itself not to define a construct method
+            //then a lookup for the parent construct should be done
+
             $arguments = [];
-            $class_args = $this->config[$id]['args'] ?? [];
-            if (count($class_args) > count($params)) {
-                throw new $this->container_exception_class('More arguments provided than available in constructor in class' . $class_name);
-            }
+            $RConstruct = NULL;
+            $CurrentRClass = $RClass;
 
-            foreach ($params as $key => $RParam) {
-                $RType = $RParam->getType();
-                $arg_name = $RParam->getName();
 
-                // Throw error if a required param is missing
-                if (!$RParam->isDefaultValueAvailable() && !isset($class_args[$arg_name])) {
-                    throw new $this->container_exception_class(sprintf('The argument "%s" on dependency "%s" is not defined.', $arg_name, $class_name));
-                }
-
-                // Use default value if there isn't one provided in the configuration
-                if (!isset($class_args[$arg_name])) {
-                    $arguments[] = $RParam->getDefaultValue();
-                    continue;
-                }
-
-                $arg = $class_args[$arg_name];
-                // Don't validate type of argument if it is not provided in the constructor
-                if (is_null($RType)) {
-                    $arguments[] = $arg;
-                    continue;
-                }
-
-                if ($RType->isBuiltin()) {
-                    // Check if expected argument type is provided
-                    switch ((string) $RType) {
-                        case 'int':
-                            $is_correct_type = is_int($arg);
-                            break;
-                        case 'string':
-                            $is_correct_type = is_string($arg);
-                            break;
-                        case 'float':
-                            $is_correct_type = is_float($arg);
-                            break;
-                        case 'bool':
-                            $is_correct_type = is_bool($arg);
-                            break;
-                        case 'array':
-                            $is_correct_type = is_array($arg);
-                            break;
-                        case 'object':
-                            $is_correct_type = is_object($arg);
-                            break;
-                        case 'callable':
-                            $is_correct_type = is_callable($arg);
-                            break;
-                        case 'iterable':
-                            $is_correct_type = is_array($arg) || $arg instanceof \Traversable;
-                            break;
-                        default:
-                            throw new $this->container_exception_class(sprintf('Unrecognized data type "%s" expected in class "%s".', $RType, $class_name));
-                    }
-
-                    if (!$is_correct_type) {
-                        throw new $this->container_exception_class(sprintf('Argument "%s" is not of type %s in class "%s".', $arg_name, $RType, $class_name));
-                    }
-
-                    $arguments[] = $arg;
+            do {
+                if ($CurrentRClass->hasMethod('__construct')) {
+                    $RConstruct = $CurrentRClass->getMethod('__construct');
                 } else {
-                    //a class ... or no type
-                    $param_class_name = (string) $RType;
-                    if (class_exists($param_class_name)) {
-                        //do nothing
-                        $dependency_id = $arg;
-                    } elseif (interface_exists($param_class_name)) {
-                        //it is an interface and we need a definition which class should be used
-                        //check the arguments
-                        if (!array_key_exists($RParam->getName(), $class_args)) {
-                            //throw new ContainerException(sprintf('The argument %s on dependency %s is not defined.', $RParam->getName(), $class_name));
-                            $exception_class = $this->container_exception_class;
-                            throw new $this->container_exception_class(sprintf('The argument %s on dependency %s is not defined.', $RParam->getName(), $class_name));
-                        }
-                        //$param_class_name = self::$CONFIG_RUNTIME['dependencies'][$class_name][$RParam->getName()];
-                        $dependency_id = $arg;//when the parameter is of type interface the config expects the args to provide another service name
+                    $CurrentRClass = $CurrentRClass->getParentClass();
 
-                    } else {
-                        //throw new ContainerException(sprintf('The argument %s on dependency %s is of type %s which is not found.', $RParam->getName(), $class_name, $param_class_name));
-                        $exception_class = $this->container_exception_class;
-                        throw new $exception_class(sprintf('The argument %s on dependency %s is of type %s which is not found.', $RParam->getName(), $class_name, $param_class_name));
+                }
+
+            } while($CurrentRClass && !$RConstruct);
+
+
+            //print $CurrentRClass->hasMethod('__construct') ? 'DA' : 'NE';
+            //$RConstruct = $CurrentRClass->getMethod('__construct');
+
+            if ($RConstruct) {
+                $params = $RConstruct->getParameters();
+
+                $class_args = $this->config[$id]['args'] ?? [];
+                if (count($class_args) > count($params)) {
+                    throw new $this->container_exception_class('More arguments provided than available in constructor in class' . $class_name);
+                }
+
+                foreach ($params as $key => $RParam) {
+                    $RType = $RParam->getType();
+                    $arg_name = $RParam->getName();
+
+                    // Throw error if a required param is missing
+                    if (!$RParam->isDefaultValueAvailable() && !isset($class_args[$arg_name])) {
+                        throw new $this->container_exception_class(sprintf('The argument "%s" on dependency "%s" is not defined.', $arg_name, $class_name));
                     }
-                    $arguments[] = $this->instantiate_dependency($dependency_id);
+
+                    // Use default value if there isn't one provided in the configuration
+                    if (!isset($class_args[$arg_name])) {
+                        $arguments[] = $RParam->getDefaultValue();
+                        continue;
+                    }
+
+                    $arg = $class_args[$arg_name];
+                    // Don't validate type of argument if it is not provided in the constructor
+                    if (is_null($RType)) {
+                        $arguments[] = $arg;
+                        continue;
+                    }
+
+                    if ($RType->isBuiltin()) {
+                        // Check if expected argument type is provided
+                        switch ((string) $RType) {
+                            case 'int':
+                                $is_correct_type = is_int($arg);
+                                break;
+                            case 'string':
+                                $is_correct_type = is_string($arg);
+                                break;
+                            case 'float':
+                                $is_correct_type = is_float($arg);
+                                break;
+                            case 'bool':
+                                $is_correct_type = is_bool($arg);
+                                break;
+                            case 'array':
+                                $is_correct_type = is_array($arg);
+                                break;
+                            case 'object':
+                                $is_correct_type = is_object($arg);
+                                break;
+                            case 'callable':
+                                $is_correct_type = is_callable($arg);
+                                break;
+                            case 'iterable':
+                                $is_correct_type = is_array($arg) || $arg instanceof \Traversable;
+                                break;
+                            default:
+                                throw new $this->container_exception_class(sprintf('Unrecognized data type "%s" expected in class "%s".', $RType, $class_name));
+                        }
+
+                        if (!$is_correct_type) {
+                            throw new $this->container_exception_class(sprintf('Argument "%s" is not of type %s in class "%s".', $arg_name, $RType, $class_name));
+                        }
+
+                        $arguments[] = $arg;
+                    } else {
+                        //a class ... or no type
+                        $param_class_name = (string) $RType;
+                        if (class_exists($param_class_name)) {
+                            //do nothing
+                            $dependency_id = $arg;
+                        } elseif (interface_exists($param_class_name)) {
+                            //it is an interface and we need a definition which class should be used
+                            //check the arguments
+                            if (!array_key_exists($RParam->getName(), $class_args)) {
+                                //throw new ContainerException(sprintf('The argument %s on dependency %s is not defined.', $RParam->getName(), $class_name));
+                                $exception_class = $this->container_exception_class;
+                                throw new $this->container_exception_class(sprintf('The argument %s on dependency %s is not defined.', $RParam->getName(), $class_name));
+                            }
+                            //$param_class_name = self::$CONFIG_RUNTIME['dependencies'][$class_name][$RParam->getName()];
+                            $dependency_id = $arg;//when the parameter is of type interface the config expects the args to provide another service name
+
+                        } else {
+                            //throw new ContainerException(sprintf('The argument %s on dependency %s is of type %s which is not found.', $RParam->getName(), $class_name, $param_class_name));
+                            $exception_class = $this->container_exception_class;
+                            throw new $exception_class(sprintf('The argument %s on dependency %s is of type %s which is not found.', $RParam->getName(), $class_name, $param_class_name));
+                        }
+                        $arguments[] = $this->instantiate_dependency($dependency_id);
+                    }
                 }
             }
+
             $this->dependencies[$id] = $RClass->newInstanceArgs($arguments);
         }
         return $this->dependencies[$id];
