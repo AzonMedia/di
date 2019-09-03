@@ -1,4 +1,5 @@
 <?php
+declare(strict_types=1);
 
 namespace Azonmedia\Di;
 
@@ -142,11 +143,16 @@ class Container
     {
 
         if (empty($this->dependencies[$id])) {
-            if (!$this->has($id)) {
-                $exception_class = $this->not_found_exception_class;
-                throw new $exception_class(sprintf('The requested dependency %s is not defined.', $id));
+            if (class_exists($id)) {
+                $class_name = $id;
+            } else {
+                if (!$this->has($id)) {
+                    $exception_class = $this->not_found_exception_class;
+                    throw new $exception_class(sprintf('The requested dependency %s is not defined.', $id));
+                }
+                $class_name = $this->config[$id]['class'];
             }
-            $class_name = $this->config[$id]['class'];
+
             $RClass = new \ReflectionClass($class_name);
 
             //it is possible that the class itself not to define a construct method
@@ -259,7 +265,18 @@ class Container
                             $exception_class = $this->container_exception_class;
                             throw new $exception_class(sprintf('The argument %s on dependency %s is of type %s which is not found.', $RParam->getName(), $class_name, $param_class_name));
                         }
-                        $arguments[] = $this->instantiate_dependency($dependency_id);
+                        if (is_array($dependency_id)) {
+                            if (count($dependency_id) !== 2) {
+                                throw new $this->container_exception_class(sprintf('The argument %s on dependency %s is defined as callable array but it is not a valid callable. The array must contain two elements while it contains %s elements.'), $RParam->getName(), $class_name, count($dependency_id) );
+                            }
+                            if (!is_callable($dependency_id)) {
+                                throw new $this->container_exception_class(sprintf('The argument %s on dependency %s is defined as callable array but it is not a valid callable.'), $RParam->getName(), $class_name);
+                            }
+                            $arguments[] = $dependency_id();//it is expected to be a callable
+                        } else {
+                            $arguments[] = $this->instantiate_dependency($dependency_id);
+                        }
+
                     }
                 }
             }
