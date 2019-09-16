@@ -64,7 +64,9 @@ class Container
      * @param array $config
      * @param string $container_exception_class
      * @param string $not_found_exception_class
-     * @throws \InvalidArgumentException
+     * @throws ContainerException
+     * @throws NotFoundException
+     * @throws \ReflectionException
      */
     public function __construct(array $config, $container_exception_class = ContainerException::class, $not_found_exception_class = NotFoundException::class)
     {
@@ -73,18 +75,18 @@ class Container
 
         if ($container_exception_class !== ContainerException::class) {
             if (!class_exists($container_exception_class)) {
-                throw new \InvalidArgumentException(sprintf('The provided class %s replacing %s does not exist.'), $container_exception_class, ContainerException::class);
+                throw new \InvalidArgumentException(sprintf('The provided class %s replacing %s does not exist.', $container_exception_class, ContainerException::class));
             }
             if (!is_subclass_of($container_exception_class, ContainerException::class)) {
-                throw new \InvalidArgumentException(sprintf('The provided class %s replacing %s must be extending %s.'), $container_exception_class, ContainerException::class, ContainerException::class);
+                throw new \InvalidArgumentException(sprintf('The provided class %s replacing %s must be extending %s.', $container_exception_class, ContainerException::class, ContainerException::class));
             }
         }
         if ($not_found_exception_class !== NotFoundException::class) {
             if (!class_exists($not_found_exception_class)) {
-                throw new \InvalidArgumentException(sprintf('The provided class %s replacing %s does not exist.'), $not_found_exception_class, NotFoundException::class);
+                throw new \InvalidArgumentException(sprintf('The provided class %s replacing %s does not exist.', $not_found_exception_class, NotFoundException::class));
             }
             if (!is_subclass_of($not_found_exception_class, NotFoundException::class)) {
-                throw new \InvalidArgumentException(sprintf('The provided class %s replacing %s must be extending %s.'), $not_found_exception_class, NotFoundException::class, NotFoundException::class);
+                throw new \InvalidArgumentException(sprintf('The provided class %s replacing %s must be extending %s.', $not_found_exception_class, NotFoundException::class, NotFoundException::class));
             }
         }
         $this->container_exception_class = $container_exception_class;
@@ -207,39 +209,36 @@ class Container
                         continue;
                     }
 
-                    if ($RType->isBuiltin()) {
-                        // Check if expected argument type is provided
-                        switch ((string) $RType) {
-                            case 'int':
-                                $is_correct_type = is_int($arg);
-                                break;
-                            case 'string':
-                                $is_correct_type = is_string($arg);
-                                break;
-                            case 'float':
-                                $is_correct_type = is_float($arg);
-                                break;
-                            case 'bool':
-                                $is_correct_type = is_bool($arg);
-                                break;
-                            case 'array':
-                                $is_correct_type = is_array($arg);
-                                break;
-                            case 'object':
-                                $is_correct_type = is_object($arg);
-                                break;
-                            case 'callable':
-                                $is_correct_type = is_callable($arg);
-                                break;
-                            case 'iterable':
-                                $is_correct_type = is_array($arg) || $arg instanceof \Traversable;
-                                break;
-                            default:
-                                throw new $this->container_exception_class(sprintf('Unrecognized data type "%s" expected in class "%s".', $RType, $class_name));
+                    if ($RType->isBuiltin() && is_array($arg) && count($arg) == 2 && class_exists($arg[0])) {
+                        // Injecting static method
+                        if (!method_exists($arg[0], $arg[1])) {
+                            throw new $this->container_exception_class(sprintf('Method %s::%s not found', $arg[0], $arg[1]));
                         }
 
+                        $method = $arg[1];
+                        $value = $arg[0]::$method();
+                        $is_correct_type = $this->is_value_of_type($value, (string) $RType, $class_name);
                         if (!$is_correct_type) {
-                            throw new $this->container_exception_class(sprintf('Argument "%s" is not of type %s in class "%s".', $arg_name, $RType, $class_name));
+                            throw new $this->container_exception_class(sprintf('Argument "%s" is not of type "%s" in class "%s".', $arg_name, $RType, $class_name));
+                        }
+
+                        $arguments[] = $value;
+
+                    } elseif ($RType->isBuiltin() && is_string($arg) && function_exists($arg)) {
+                        // Injecting built in functions
+                        $function = $arg;
+                        $value = $function();
+                        $is_correct_type = $this->is_value_of_type($value, (string) $RType, $class_name);
+                        if (!$is_correct_type) {
+                            throw new $this->container_exception_class(sprintf('Argument "%s" is not of type "%s" in class "%s".', $arg_name, $RType, $class_name));
+                        }
+
+                        $arguments[] = $value;
+                    } elseif ($RType->isBuiltin()) {
+                        // Check if expected argument type is provided
+                        $is_correct_type = $this->is_value_of_type($arg, (string) $RType, $class_name);
+                        if (!$is_correct_type) {
+                            throw new $this->container_exception_class(sprintf('Argument "%s" is not of type "%s" in class "%s".', $arg_name, $RType, $class_name));
                         }
 
                         $arguments[] = $arg;
@@ -267,16 +266,15 @@ class Container
                         }
                         if (is_array($dependency_id)) {
                             if (count($dependency_id) !== 2) {
-                                throw new $this->container_exception_class(sprintf('The argument %s on dependency %s is defined as callable array but it is not a valid callable. The array must contain two elements while it contains %s elements.'), $RParam->getName(), $class_name, count($dependency_id) );
+                                throw new $this->container_exception_class(sprintf('The argument %s on dependency %s is defined as callable array but it is not a valid callable. The array must contain two elements while it contains %s elements.', $RParam->getName(), $class_name, count($dependency_id)));
                             }
                             if (!is_callable($dependency_id)) {
-                                throw new $this->container_exception_class(sprintf('The argument %s on dependency %s is defined as callable array but it is not a valid callable.'), $RParam->getName(), $class_name);
+                                throw new $this->container_exception_class(sprintf('The argument %s on dependency %s is defined as callable array but it is not a valid callable.', $RParam->getName(), $class_name));
                             }
                             $arguments[] = $dependency_id();//it is expected to be a callable
                         } else {
                             $arguments[] = $this->instantiate_dependency($dependency_id);
                         }
-
                     }
                 }
             }
@@ -284,6 +282,48 @@ class Container
             $this->dependencies[$id] = $RClass->newInstanceArgs($arguments);
         }
         return $this->dependencies[$id];
+    }
+
+    /**
+     * Check is a value is of a selected type
+     *
+     * @param $value
+     * @param $expected_type
+     * @param $class_name
+     * @return bool
+     */
+    protected function is_value_of_type($value, $expected_type, $class_name): bool
+    {
+        switch ($expected_type) {
+            case 'int':
+                $is_correct_type = is_int($value);
+                break;
+            case 'string':
+                $is_correct_type = is_string($value);
+                break;
+            case 'float':
+                $is_correct_type = is_float($value);
+                break;
+            case 'bool':
+                $is_correct_type = is_bool($value);
+                break;
+            case 'array':
+                $is_correct_type = is_array($value);
+                break;
+            case 'object':
+                $is_correct_type = is_object($value);
+                break;
+            case 'callable':
+                $is_correct_type = is_callable($value);
+                break;
+            case 'iterable':
+                $is_correct_type = is_array($value) || $value instanceof \Traversable;
+                break;
+            default:
+                throw new $this->container_exception_class(sprintf('Unrecognized data type "%s" expected in class "%s".', $expected_type, $class_name));
+        }
+
+        return $is_correct_type;
     }
 
 }
