@@ -244,7 +244,8 @@ class Container
                         $arguments[] = $arg;
                     } else {
                         //a class ... or no type
-                        $param_class_name = (string) $RType;
+                        //$param_class_name = (string) $RType;
+                        $param_class_name = $RType->getName();
                         if (class_exists($param_class_name)) {
                             //do nothing
                             $dependency_id = $arg;
