@@ -209,6 +209,7 @@ class Container
                         continue;
                     }
 
+                    $type_name = $RType->getName();
                     if ($RType->isBuiltin() && is_array($arg) && count($arg) == 2 && class_exists($arg[0])) {
                         // Injecting static method
                         if (!method_exists($arg[0], $arg[1])) {
@@ -217,9 +218,11 @@ class Container
 
                         $method = $arg[1];
                         $value = $arg[0]::$method();
-                        $is_correct_type = $this->is_value_of_type($value, (string) $RType, $class_name);
+                        //$is_correct_type = $this->is_value_of_type($value, (string) $RType, $class_name);
+                        $is_correct_type = $this->is_value_of_type($value, $type_name, $class_name);
                         if (!$is_correct_type) {
-                            throw new $this->container_exception_class(sprintf('Argument "%s" is not of type "%s" in class "%s".', $arg_name, $RType, $class_name));
+                            //throw new $this->container_exception_class(sprintf('Argument "%s" is not of type "%s" in class "%s".', $arg_name, $RType, $class_name));
+                            throw new $this->container_exception_class(sprintf('Argument "%s" is not of type "%s" in class "%s".', $arg_name, $type_name, $class_name));
                         }
 
                         $arguments[] = $value;
@@ -228,17 +231,21 @@ class Container
                         // Injecting built in functions
                         $function = $arg;
                         $value = $function();
-                        $is_correct_type = $this->is_value_of_type($value, (string) $RType, $class_name);
+                        //$is_correct_type = $this->is_value_of_type($value, (string) $RType, $class_name);
+                        $is_correct_type = $this->is_value_of_type($value, $type_name, $class_name);
                         if (!$is_correct_type) {
-                            throw new $this->container_exception_class(sprintf('Argument "%s" is not of type "%s" in class "%s".', $arg_name, $RType, $class_name));
+                            //throw new $this->container_exception_class(sprintf('Argument "%s" is not of type "%s" in class "%s".', $arg_name, $RType, $class_name));
+                            throw new $this->container_exception_class(sprintf('Argument "%s" is not of type "%s" in class "%s".', $arg_name, $type_name, $class_name));
                         }
 
                         $arguments[] = $value;
                     } elseif ($RType->isBuiltin()) {
                         // Check if expected argument type is provided
-                        $is_correct_type = $this->is_value_of_type($arg, (string) $RType, $class_name);
+                        //$is_correct_type = $this->is_value_of_type($arg, (string) $RType, $class_name);
+                        $is_correct_type = $this->is_value_of_type($arg, $type_name, $class_name);
                         if (!$is_correct_type) {
-                            throw new $this->container_exception_class(sprintf('Argument "%s" is not of type "%s" in class "%s".', $arg_name, $RType, $class_name));
+                            //throw new $this->container_exception_class(sprintf('Argument "%s" is not of type "%s" in class "%s".', $arg_name, $RType, $class_name));
+                            throw new $this->container_exception_class(sprintf('Argument "%s" is not of type "%s" in class "%s".', $arg_name, $type_name, $class_name));
                         }
 
                         $arguments[] = $arg;
