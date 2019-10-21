@@ -119,6 +119,13 @@ class Container
             $exception_class = $this->not_found_exception_class;
             throw new $exception_class(sprintf('The requested dependency %s is not defined.', $id));
         }
+//        if (class_exists(\Swoole\Coroutine::class) && \Swoole\Coroutine::getCid() >= 1) {
+//            //check for a coroutine dependency first
+//            $Context = \Swoole\Coroutine::getContext();
+//            if (isset($Context->{$id})) {
+//                return $Context->{$id};
+//            }
+//        }
         return $this->instantiate_dependency($id);
     }
 
