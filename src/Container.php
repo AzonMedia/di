@@ -280,13 +280,18 @@ class Container
                             throw new $exception_class(sprintf('The argument %s on dependency %s is of type %s which is not found.', $RParam->getName(), $class_name, $param_class_name));
                         }
                         if (is_array($dependency_id)) {
-                            if (count($dependency_id) !== 2) {
-                                throw new $this->container_exception_class(sprintf('The argument %s on dependency %s is defined as callable array but it is not a valid callable. The array must contain two elements while it contains %s elements.', $RParam->getName(), $class_name, count($dependency_id)));
+                            if ($RParam->isVariadic()) {
+                                $arguments = [...$arguments, ...$dependency_id];
+                            } else {
+                                if (count($dependency_id) !== 2) {
+                                    throw new $this->container_exception_class(sprintf('The argument %s on dependency %s is defined as callable array but it is not a valid callable. The array must contain two elements while it contains %s elements.', $RParam->getName(), $class_name, count($dependency_id)));
+                                }
+                                if (!is_callable($dependency_id)) {
+                                    throw new $this->container_exception_class(sprintf('The argument %s on dependency %s is defined as callable array but it is not a valid callable.', $RParam->getName(), $class_name));
+                                }
+                                $arguments[] = $dependency_id();//it is expected to be a callable
                             }
-                            if (!is_callable($dependency_id)) {
-                                throw new $this->container_exception_class(sprintf('The argument %s on dependency %s is defined as callable array but it is not a valid callable.', $RParam->getName(), $class_name));
-                            }
-                            $arguments[] = $dependency_id();//it is expected to be a callable
+
                         } else {
                             $arguments[] = $this->instantiate_dependency($dependency_id);
                         }
