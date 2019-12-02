@@ -40,24 +40,31 @@ class Container
      * ]
      * @var array
      */
-    private $config = [];
+    private array $config = [];
 
     /**
      * @var array Array of objects/services/dependencies
      */
-    private $dependencies = [];
+    private array $dependencies = [];
 
     /**
      * Contains the name of the class replacing the ContainerException
      * @var string
      */
-    private $container_exception_class = '';
+    private string $container_exception_class = ContainerException::class;
 
     /**
      * Contains the name of the class replacing the NotFoundException
      * @var string
      */
-    private $not_found_exception_class = '';
+    private string $not_found_exception_class = NotFoundException::class;
+
+    /**
+     * An indexed array of dependency ids.
+     * Used to detect recursions when instantiating dependencies.
+     * @var array
+     */
+    private array $requested_dependencies = [];
 
     /**
      * Container constructor.
@@ -96,10 +103,9 @@ class Container
         //certain dependencies may need to be initialized immediately instead of request
         foreach ($this->config as $dependency_name=>$dependency_config) {
             if (!empty($dependency_config['initialize_immediately'])) {
-                $this->instantiate_dependency($dependency_name);
+                $this->dependencies[$dependency_name] = $this->instantiate_dependency($dependency_name);
             }
         }
-
 
 
     }
@@ -115,18 +121,14 @@ class Container
     //public function get(string $id) : object
     public function get($id)
     {
-        if (!isset($this->config[$id])) {
+        if (!$this->has($id)) {
             $exception_class = $this->not_found_exception_class;
             throw new $exception_class(sprintf('The requested dependency %s is not defined.', $id));
         }
-//        if (class_exists(\Swoole\Coroutine::class) && \Swoole\Coroutine::getCid() >= 1) {
-//            //check for a coroutine dependency first
-//            $Context = \Swoole\Coroutine::getContext();
-//            if (isset($Context->{$id})) {
-//                return $Context->{$id};
-//            }
-//        }
-        return $this->instantiate_dependency($id);
+        if (empty($this->dependencies[$id])) {
+            $this->dependencies[$id] = $this->instantiate_dependency($id);
+        }
+        return $this->dependencies[$id];
     }
 
     /**
@@ -140,6 +142,66 @@ class Container
         return array_key_exists($id, $this->config);
     }
 
+//    /**
+//     * @param string $id
+//     * @return bool
+//     */
+//    public function is_dependency_instantiated(string $id) : bool
+//    {
+//        return !empty($this->dependencies[$id]);
+//    }
+
+    /**
+     * Not part of PSR
+     * Returns the class name of a dependency
+     * @param string $id
+     * @return string
+     */
+    public function get_class_by_id(string $id) : string
+    {
+        if (!$this->has($id)) {
+            $exception_class = $this->not_found_exception_class;
+            throw new $exception_class(sprintf('The requested dependency %s is not defined.', $id));
+        }
+        if (class_exists($id)) {
+            $class_name = $id;
+        } else {
+            if (!$this->has($id)) {
+                $exception_class = $this->not_found_exception_class;
+                throw new $exception_class(sprintf('The requested dependency %s is not defined.', $id));
+            }
+            $class_name = $this->config[$id]['class'];
+        }
+        return $class_name;
+    }
+
+    /**
+     * Returns dependency IDs by $class
+     * @param string $class
+     * @return array
+     */
+    public function get_ids_by_class(string $class) : array
+    {
+        $ret = [];
+        foreach ($this->config as $name => $dependency) {
+            if ($dependency['class'] === $class) {
+                $ret[] = $name;
+            }
+        }
+        return $ret;
+    }
+
+    /**
+     * Not part of PSR
+     * Returns what the provided $id depends on.
+     * @param string $id
+     * @return array
+     */
+    public function get_depends_on(string $id) : array
+    {
+        return $this->config[$id]['depends_on'] ?? [];
+    }
+
     /**
      * Instantiates the object for the provided service $id if the object does not exist already.
      * @param string $id Service name
@@ -148,19 +210,17 @@ class Container
      * @throws ContainerException
      * @throws NotFoundException
      */
-    private function instantiate_dependency(string $id): object
+    protected function instantiate_dependency(string $id): object
     {
 
-        if (empty($this->dependencies[$id])) {
-            if (class_exists($id)) {
-                $class_name = $id;
-            } else {
-                if (!$this->has($id)) {
-                    $exception_class = $this->not_found_exception_class;
-                    throw new $exception_class(sprintf('The requested dependency %s is not defined.', $id));
-                }
-                $class_name = $this->config[$id]['class'];
-            }
+        if (in_array($id, $this->requested_dependencies)) {
+            throw new $this->container_exception_class(sprintf('A recursion detected while loading dependency %s. The dependency stack so far is [%s].', $id, implode(',', $this->requested_dependencies)));
+        }
+        array_push($this->requested_dependencies, $id);
+
+        try {
+
+            $class_name = $this->get_class_by_id($id);
 
             $RClass = new \ReflectionClass($class_name);
 
@@ -180,11 +240,17 @@ class Container
 
                 }
 
-            } while($CurrentRClass && !$RConstruct);
+            } while ($CurrentRClass && !$RConstruct);
 
 
-            //print $CurrentRClass->hasMethod('__construct') ? 'DA' : 'NE';
-            //$RConstruct = $CurrentRClass->getMethod('__construct');
+            foreach ($this->get_depends_on($id) as $depends_on_name) {
+                if (!$this->has($depends_on_name)) {
+                    throw new $this->container_exception_class(sprintf('The dependency %s depends on %s but this is not defined.', $id, $depends_on_name));
+                }
+                $this->get($depends_on_name);
+            }
+            //TODO add cycle detection and throw an exception if detected
+
 
             if ($RConstruct) {
                 $params = $RConstruct->getParameters();
@@ -293,15 +359,22 @@ class Container
                             }
 
                         } else {
-                            $arguments[] = $this->instantiate_dependency($dependency_id);
+                            $arguments[] = $this->get($dependency_id);
                         }
                     }
                 }
             }
 
-            $this->dependencies[$id] = $RClass->newInstanceArgs($arguments);
+        } finally {
+            //no matter what happens pop the dependency
+            array_pop($this->requested_dependencies);
         }
-        return $this->dependencies[$id];
+
+
+
+        //$this->dependencies[$id] = $RClass->newInstanceArgs($arguments);
+        return $RClass->newInstanceArgs($arguments);
+
     }
 
     /**
