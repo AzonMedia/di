@@ -107,7 +107,16 @@ class Container
             }
         }
 
+    }
 
+    public function get_container_exception_class() : string
+    {
+        return $this->not_found_exception_class;
+    }
+
+    public function get_not_found_exception_class() : string
+    {
+        return $this->not_found_exception_class;
     }
 
     /**
@@ -121,12 +130,25 @@ class Container
     //public function get(string $id) : object
     public function get($id)
     {
-        if (!$this->has($id)) {
-            $exception_class = $this->not_found_exception_class;
-            throw new $exception_class(sprintf('The requested dependency %s is not defined.', $id));
+
+        if (in_array($id, $this->requested_dependencies)) {
+            throw new $this->container_exception_class(sprintf('A recursion detected while loading dependency %s. The dependency stack so far is [%s].', $id, implode(',', $this->requested_dependencies)));
         }
-        if (empty($this->dependencies[$id])) {
-            $this->dependencies[$id] = $this->instantiate_dependency($id);
+        array_push($this->requested_dependencies, $id);
+
+        try {
+
+
+            if (!$this->has($id)) {
+                $exception_class = $this->not_found_exception_class;
+                throw new $exception_class(sprintf('The requested dependency %s is not defined.', $id));
+            }
+            if (empty($this->dependencies[$id])) {
+                $this->dependencies[$id] = $this->instantiate_dependency($id);
+            }
+
+        } finally {
+            array_pop($this->requested_dependencies);
         }
         return $this->dependencies[$id];
     }
@@ -213,10 +235,11 @@ class Container
     protected function instantiate_dependency(string $id): object
     {
 
-        if (in_array($id, $this->requested_dependencies)) {
-            throw new $this->container_exception_class(sprintf('A recursion detected while loading dependency %s. The dependency stack so far is [%s].', $id, implode(',', $this->requested_dependencies)));
-        }
-        array_push($this->requested_dependencies, $id);
+        //this cant work correctly in coroutine context
+        //if (in_array($id, $this->requested_dependencies)) {
+        //    throw new $this->container_exception_class(sprintf('A recursion detected while loading dependency %s. The dependency stack so far is [%s].', $id, implode(',', $this->requested_dependencies)));
+        //}
+        //array_push($this->requested_dependencies, $id);
 
         try {
 
@@ -329,6 +352,9 @@ class Container
                         if (class_exists($param_class_name)) {
                             //do nothing
                             $dependency_id = $arg;
+                            //try to instantiate the class only if it has no arguments
+                            //TODO - add arguments check
+                            //$dependency_id = new $param_class_name();
                         } elseif (interface_exists($param_class_name)) {
                             //it is an interface and we need a definition which class should be used
                             //check the arguments
@@ -357,7 +383,8 @@ class Container
                                 }
                                 $arguments[] = $dependency_id();//it is expected to be a callable
                             }
-
+//                        } elseif (is_object($dependency_id)) {
+//                            $arguments[] = $dependency_id;
                         } else {
                             $arguments[] = $this->get($dependency_id);
                         }
@@ -367,7 +394,7 @@ class Container
 
         } finally {
             //no matter what happens pop the dependency
-            array_pop($this->requested_dependencies);
+            //array_pop($this->requested_dependencies);
         }
 
 
