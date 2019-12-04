@@ -7,6 +7,7 @@ use Azonmedia\Di\Exceptions\ContainerException;
 use Azonmedia\Di\Exceptions\NotFoundException;
 use Azonmedia\Di\Interfaces\CoroutineDependencyInterface;
 use Guzaba2\Base\Exceptions\RunTimeException;
+use Swoole\Coroutine;
 
 /**
  * Class CoroutineContainer
@@ -15,6 +16,45 @@ use Guzaba2\Base\Exceptions\RunTimeException;
  */
 class CoroutineContainer extends Container
 {
+
+    /**
+     * CoroutineContainer constructor.
+     * Initializes all dependencies that are not CoroutineDependencyInterface.
+     * If these are not initialized here then if a lazy initialization dependency that is requested in coroutine mode multiple times will use the parent::get() which will fail the requested_dependencies check due to the high parallelism.
+     * Also it is a good idea in Worker/Coroutine mode to have all non-coroutine dependencies to be initialized.
+     * @param array $config
+     * @param string $container_exception_class
+     * @param string $not_found_exception_class
+     * @throws ContainerException
+     * @throws NotFoundException
+     * @throws \ReflectionException
+     */
+//cant initialize here all dependencies because these may depend on Kernel::get_service()
+//    public function __construct(array $config, $container_exception_class = ContainerException::class, $not_found_exception_class = NotFoundException::class)
+//    {
+//        parent::__construct($config, $container_exception_class, $not_found_exception_class);
+//        foreach ($config as $dependency_name=>$dependency_config) {
+//            $this->get($dependency_name);
+//            if (!is_a($dependency_config['class'], CoroutineDependencyInterface::class, TRUE)) {
+//                $this->get($dependency_name);
+//            }
+//        }
+//    }
+
+    public function inititialize() : void
+    {
+        if ($this->is_initialized()) {
+            return;
+        }
+        foreach ($this->config as $dependency_name=>$dependency_config) {
+            $this->get($dependency_name);
+            if (!is_a($dependency_config['class'], CoroutineDependencyInterface::class, TRUE)) {
+                $this->get($dependency_name);
+            }
+        }
+        $this->is_initialized_flag = TRUE;
+    }
+
     /**
      * If the requested dependency is a coroutine one (implements CoroutineDependencyInterface) but is invoked outside Coroutine context the dependency will be served the normal way - parent::get().
      * @override

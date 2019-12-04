@@ -40,7 +40,7 @@ class Container
      * ]
      * @var array
      */
-    private array $config = [];
+    protected array $config = [];
 
     /**
      * @var array Array of objects/services/dependencies
@@ -65,6 +65,11 @@ class Container
      * @var array
      */
     private array $requested_dependencies = [];
+
+    /**
+     * @var bool
+     */
+    protected bool $is_initialized_flag = FALSE;
 
     /**
      * Container constructor.
@@ -101,12 +106,31 @@ class Container
 
 
         //certain dependencies may need to be initialized immediately instead of request
+//        foreach ($this->config as $dependency_name=>$dependency_config) {
+//            if (!empty($dependency_config['initialize_immediately'])) {
+//                $this->dependencies[$dependency_name] = $this->instantiate_dependency($dependency_name);
+//            }
+//        }
+
+    }
+
+    public function is_initialized() : bool
+    {
+        return $this->is_initialized_flag;
+    }
+
+    public function initialize() : void
+    {
+        if ($this->is_initialized()) {
+            return;
+        }
+        //certain dependencies may need to be initialized immediately instead of request
         foreach ($this->config as $dependency_name=>$dependency_config) {
             if (!empty($dependency_config['initialize_immediately'])) {
                 $this->dependencies[$dependency_name] = $this->instantiate_dependency($dependency_name);
             }
         }
-
+        $this->is_initialized_flag = TRUE;
     }
 
     public function get_container_exception_class() : string
