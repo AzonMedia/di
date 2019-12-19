@@ -14,7 +14,7 @@ use Swoole\Coroutine;
  * Coroutine aware dependency injection container.
  * @package Azonmedia\Di
  */
-class CoroutineContainer extends Container
+class CoroutineContainer extends WorkerContainer
 {
 
     /**
@@ -41,19 +41,19 @@ class CoroutineContainer extends Container
 //        }
 //    }
 
-    public function inititialize() : void
-    {
-        if ($this->is_initialized()) {
-            return;
-        }
-        foreach ($this->config as $dependency_name=>$dependency_config) {
-            $this->get($dependency_name);
-            if (!is_a($dependency_config['class'], CoroutineDependencyInterface::class, TRUE)) {
-                $this->get($dependency_name);
-            }
-        }
-        $this->is_initialized_flag = TRUE;
-    }
+//    public function inititialize() : void
+//    {
+//        if ($this->is_initialized()) {
+//            return;
+//        }
+//        foreach ($this->config as $dependency_name=>$dependency_config) {
+//            if (is_a($dependency_config['class'], CoroutineDependencyInterface::class, TRUE)) {
+//                $this->get($dependency_name);
+//            }
+//        }
+//        //$this->is_initialized_flag = TRUE;
+//        parent::initialize();
+//    }
 
     /**
      * If the requested dependency is a coroutine one (implements CoroutineDependencyInterface) but is invoked outside Coroutine context the dependency will be served the normal way - parent::get().

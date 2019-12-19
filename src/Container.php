@@ -119,19 +119,19 @@ class Container
         return $this->is_initialized_flag;
     }
 
-    public function initialize() : void
-    {
-        if ($this->is_initialized()) {
-            return;
-        }
-        //certain dependencies may need to be initialized immediately instead of request
-        foreach ($this->config as $dependency_name=>$dependency_config) {
-            if (!empty($dependency_config['initialize_immediately'])) {
-                $this->dependencies[$dependency_name] = $this->instantiate_dependency($dependency_name);
-            }
-        }
-        $this->is_initialized_flag = TRUE;
-    }
+//    public function initialize() : void
+//    {
+//        if ($this->is_initialized()) {
+//            return;
+//        }
+//        //certain dependencies may need to be initialized immediately instead of request
+//        foreach ($this->config as $dependency_name=>$dependency_config) {
+//            if (!empty($dependency_config['initialize_immediately'])) {
+//                $this->dependencies[$dependency_name] = $this->instantiate_dependency($dependency_name);
+//            }
+//        }
+//        $this->is_initialized_flag = TRUE;
+//    }
 
     public function get_container_exception_class() : string
     {
