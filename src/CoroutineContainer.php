@@ -17,6 +17,8 @@ use Swoole\Coroutine;
 class CoroutineContainer extends WorkerContainer
 {
 
+    public const DEPENDENCY_TYPE_COROUTINE = 'coroutine';
+
     /**
      * CoroutineContainer constructor.
      * Initializes all dependencies that are not CoroutineDependencyInterface.
@@ -69,7 +71,7 @@ class CoroutineContainer extends WorkerContainer
     {
         $ret = NULL;
         $class_name = $this->get_class_by_id($id);
-        if (is_a($class_name, CoroutineDependencyInterface::class, TRUE) && \Swoole\Coroutine::getCid() > 0) {
+        if ( (is_a($class_name, CoroutineDependencyInterface::class, TRUE) || $this->get_dependency_type($id) === self::DEPENDENCY_TYPE_COROUTINE) && \Swoole\Coroutine::getCid() > 0) {
             $Context = \Swoole\Coroutine::getContext();
 
             if (!property_exists($Context, self::class)) {

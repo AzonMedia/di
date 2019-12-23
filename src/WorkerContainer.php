@@ -6,11 +6,13 @@ namespace Azonmedia\Di;
 
 use Azonmedia\Di\Exceptions\ContainerException;
 use Azonmedia\Di\Exceptions\NotFoundException;
-use Azonmedia\Di\Interfaces\CoroutineDependencyInterface;
 use Azonmedia\Di\Interfaces\WorkerDependencyInterface;
 
 class WorkerContainer extends Container
 {
+
+    public const DEPENDENCY_TYPE_WORKER = 'worker';
+
 //    public function inititialize() : void
 //    {
 //        if ($this->is_initialized()) {
@@ -26,8 +28,12 @@ class WorkerContainer extends Container
 //        parent::initialize();
 //    }
 
+    private array $worker_requested_dependencies = [];
+
+    private array $worker_dependencies = [];
+
     /**
-     * If the requested dependency is a coroutine one (implements CoroutineDependencyInterface) but is invoked outside Coroutine context the dependency will be served the normal way - parent::get().
+     *
      * @override
      * @param string $id
      * @return object
@@ -38,35 +44,25 @@ class WorkerContainer extends Container
     //public function get(string $id) : object
     public function get($id)
     {
+
         $ret = NULL;
         $class_name = $this->get_class_by_id($id);
-        if (is_a($class_name, CoroutineDependencyInterface::class, TRUE) && \Swoole\Coroutine::getCid() > 0) {
-            $Context = \Swoole\Coroutine::getContext();
+        $ServerInstance = \Swoole\Server::getInstance();
+        if ( (is_a($class_name, WorkerDependencyInterface::class, TRUE) || $this->get_dependency_type($id) === self::DEPENDENCY_TYPE_WORKER) && $ServerInstance) {
 
-            if (!property_exists($Context, self::class)) {
-                $Context->{self::class} = [];
-            }
-            if (!array_key_exists('requested_dependencies', $Context->{self::class})) {
-                $Context->{self::class}['requested_dependencies'] = [];
-            }
-            if (in_array($id, $Context->{self::class}['requested_dependencies'])) {
+            if (in_array($id, $this->worker_requested_dependencies)) {
                 $container_exception_class = $this->get_container_exception_class();
-                throw new $container_exception_class(sprintf('A recursion detected while loading dependency %s. The dependency stack so far is [%s].', $id, implode(',', $Context->{self::class}['requested_dependencies'] )));
+                throw new $container_exception_class(sprintf('A recursion detected while loading dependency %s. The dependency stack so far is [%s].', $id, implode(',', $this->worker_requested_dependencies) ));
             }
-            array_push($Context->{self::class}['requested_dependencies'], $id);
+            array_push($this->worker_requested_dependencies, $id);
             try {
-                if (!isset($Context->{$class_name})) {
-                    if (!empty($Context->is_in_cleanup)) {
-                        $container_exception_class = $this->get_container_exception_class();
-                        throw new $container_exception_class(sprintf('The coroutine %s context is in dependency cleanup at the end of coroutine execution and a new coroutine dependency %s is requested.', \Swoole\Coroutine::getcid(), $id));
-                    }
-                    $Context->{$class_name} = $this->instantiate_dependency($id);
+                if (!isset($this->worker_dependencies[$class_name])) {
+                    $this->worker_dependencies[$class_name] = $this->instantiate_dependency($id);
                 }
-                $ret = $Context->{$class_name};
+                $ret = $this->worker_dependencies[$class_name];
             } finally {
-                array_pop($Context->{self::class}['requested_dependencies']);
+                array_pop($this->worker_requested_dependencies);
             }
-
 
         } else {
             $ret = parent::get($id);
