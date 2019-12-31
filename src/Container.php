@@ -106,11 +106,11 @@ class Container
 
 
         //certain dependencies may need to be initialized immediately instead of request
-//        foreach ($this->config as $dependency_name=>$dependency_config) {
-//            if (!empty($dependency_config['initialize_immediately'])) {
-//                $this->dependencies[$dependency_name] = $this->instantiate_dependency($dependency_name);
-//            }
-//        }
+        foreach ($this->config as $dependency_name=>$dependency_config) {
+            if (!empty($dependency_config['initialize_immediately'])) {
+                $this->dependencies[$dependency_name] = $this->instantiate_dependency($dependency_name);
+            }
+        }
 
     }
 
