@@ -18,7 +18,7 @@ use Psr\Container\ContainerInterface;
 class Container
     implements ContainerInterface
 {
-
+    public const DEPENDENCY_TYPE_GLOBAL = 'global';
     /**
      * @example
      * 'ConnectionFactory' => [
@@ -186,6 +186,23 @@ class Container
     public function has($id)
     {
         return array_key_exists($id, $this->config);
+    }
+
+    /**
+     * The dependency type (this class supported only global).
+     * @param string $id
+     * @return string
+     */
+    public function get_dependency_type(string $id) : string
+    {
+        if (!$this->has($id)) {
+            throw new $this->not_found_exception_class(sprintf('The dependency container has no dependency %s.', $id));
+        }
+        $ret = 'global';
+        if (!empty($this->config[$id]['type'])) {
+            $ret = $this->config[$id]['type'];
+        }
+        return $ret;
     }
 
 //    /**
