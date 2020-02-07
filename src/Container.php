@@ -144,6 +144,18 @@ class Container
     }
 
     /**
+     * Adds an already instantiated dependency.
+     * To be used at runtime to add service that is already instantiated.
+     * @param string $id
+     * @param object $Service
+     */
+    public function add(string $id, object $Service) : void
+    {
+        $this->config[$id] = ['class' => get_class($Service)];
+        $this->dependencies[$id] = $Service;
+    }
+
+    /**
      * @inheritDoc
      * @param string $id
      * @return object
@@ -161,8 +173,6 @@ class Container
         array_push($this->requested_dependencies, $id);
 
         try {
-
-
             if (!$this->has($id)) {
                 $exception_class = $this->not_found_exception_class;
                 throw new $exception_class(sprintf('The requested dependency %s is not defined.', $id));
@@ -170,7 +180,6 @@ class Container
             if (empty($this->dependencies[$id])) {
                 $this->dependencies[$id] = $this->instantiate_dependency($id);
             }
-
         } finally {
             array_pop($this->requested_dependencies);
         }
