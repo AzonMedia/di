@@ -47,8 +47,11 @@ class WorkerContainer extends Container
 
         $ret = NULL;
         $class_name = $this->get_class_by_id($id);
-        $ServerInstance = \Swoole\Server::getInstance();
-        if ( (is_a($class_name, WorkerDependencyInterface::class, TRUE) || $this->get_dependency_type($id) === self::DEPENDENCY_TYPE_WORKER) && $ServerInstance) {
+        //$ServerInstance = \Swoole\Server::getInstance();//this is no longer available as of Swoole 4.5.0
+        //to check is it executed in a worker we can rely on the coroutine - if the code is executed in a coroutine this means it is probably in worker context
+        $cid = \Swoole\Coroutine::getCid();
+        //if ( (is_a($class_name, WorkerDependencyInterface::class, TRUE) || $this->get_dependency_type($id) === self::DEPENDENCY_TYPE_WORKER) && $ServerInstance) {
+        if ( (is_a($class_name, WorkerDependencyInterface::class, TRUE) || $this->get_dependency_type($id) === self::DEPENDENCY_TYPE_WORKER) && $cid) {
 
             if (in_array($id, $this->worker_requested_dependencies)) {
                 $container_exception_class = $this->get_container_exception_class();
