@@ -4,7 +4,7 @@
     "description": "Dependency injection container",
     "keywords": ["dependency injection", "di", "container"],
     "homepage": "https://github.com/AzonMedia/di",
-    "license": "BSD-3-Clause",
+    "license": "MIT",
     "authors": [
         {
             "name": "Vesko Kenashkov",
