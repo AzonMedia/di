@@ -447,8 +447,6 @@ class Container
             //array_pop($this->requested_dependencies);
         }
 
-
-
         //$this->dependencies[$id] = $RClass->newInstanceArgs($arguments);
         return $RClass->newInstanceArgs($arguments);
 
